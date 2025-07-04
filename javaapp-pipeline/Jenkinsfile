@@ -15,7 +15,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo '🔄 Checking out source code...'
-                git branch: 'master', url: 'https://github.com/artisantek/jenkins.git'
+                git branch: 'master', url: 'https://github.com/Pooja-chandrappa/jenkins.git'
             }
         }
         
