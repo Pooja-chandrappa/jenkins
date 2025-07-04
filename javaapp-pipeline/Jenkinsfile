@@ -33,21 +33,7 @@ pipeline {
                     }
                 }
 
-                stage('Trivy Scan') {
-                    steps {
-                        echo '🔒 Running Trivy security scan...'
-                        dir('javaapp-pipeline') {
-                            sh '''
-                                echo "Starting Trivy filesystem scan..."
-                                wget -q https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl -O html.tpl
-                                trivy fs --format template --template "@html.tpl" -o trivy-report.html .
-                                echo "Trivy scan completed. Report: trivy-report.html"
-                            '''
-                        }
-                    }
-                }
-            }
-        }
+                
 
         stage('Sonar Analysis') {
             steps {
@@ -92,16 +78,7 @@ pipeline {
                                 echo "App is not running."
                             fi
                         '''
-                        
-                        // Deploy the new application
-                        sh '''
-                            # Set JENKINS_NODE_COOKIE to prevent Jenkins from killing the process
-                            export JENKINS_NODE_COOKIE=dontKillMe
-                            
-                            # Start the application in background
-                            echo "Starting application on port ${APP_PORT}..."
-                            nohup java -jar "${JAR_FILE}" > application.log 2>&1 &
-                        '''
+                                              
                     }
                 }
             }
