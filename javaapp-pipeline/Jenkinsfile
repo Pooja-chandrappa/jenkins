@@ -108,17 +108,4 @@ pipeline {
         }
     }
     
-    post {
-        always {
-            cleanWs()
-        }
-        success {
-            echo '🎉 Pipeline completed successfully!'
-        }
-        failure {
-            emailext subject: "Pipeline Failed: ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
-                     body: "Build failed. Please check the logs at ${env.BUILD_URL}",
-                     to: "artisantek.adithya@gmail.com"
-        }
-    }
-} 
+  
