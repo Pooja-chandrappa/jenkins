@@ -19,70 +19,7 @@ pipeline {
             }
         }
         
-        stage('Tests') {
-            parallel {
-                stage('Unit Tests') {
-                    steps {
-                        echo '🧪 Running unit tests...'
-                        dir('javaapp-pipeline') {
-                            sh '''
-                                echo "Starting test execution..."
-                                mvn clean test
-                            '''
-                        }
-                    }
-                }
-
-                
-
-        stage('Sonar Analysis') {
-            steps {
-                echo '📊 Running SonarQube analysis...'
-                dir('javaapp-pipeline') {
-                    withSonarQubeEnv('sonar') {
-                        sh '''
-                            echo "Starting SonarQube analysis..."
-                            mvn verify sonar:sonar \
-                                -Dsonar.projectKey=javaapp \
-                                -Dsonar.projectName=javaapp \
-                        '''
-                    }
-                }
-            }
-        }
-        
-        stage('Build') {
-            steps {
-                echo '🏗️ Building application...'
-                dir('javaapp-pipeline') {
-                    sh '''
-                        echo "Building JAR file..."
-                        mvn package -DskipTests=true
-                    '''
-                }
-            }
-        }
-        
-        stage('Deploy') {
-            steps {
-                echo '🚀 Deploying application...'
-                dir('javaapp-pipeline/target') {
-                    script {
-                        // Stop any existing application process
-                        sh '''
-                            echo "🛑 Stopping any existing application processes..."
-                            if pgrep -f "java -jar java-sample-21-1.0.0.jar" > /dev/null; then
-                                pkill -f "java -jar java-sample-21-1.0.0.jar"
-                                echo "App was running and has been killed."
-                            else
-                                echo "App is not running."
-                            fi
-                        '''
-                                              
-                    }
-                }
-            }
-        }
     }
-    
+
+}
   
