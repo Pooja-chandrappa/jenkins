@@ -1,35 +1,25 @@
 pipeline {
-       agent { label 'agent' }
-
-    environment {
-        ARTIFACTORY_SERVER_ID = 'jfrog'
-        ARTIFACTORY_REPO_PATH = 'libs-release-local/javaapp-tomcat/'
-        WAR_NAME = 'artisantek-app.war'
-    }
+    agent {label 'agent'}
 
     stages {
         stage('Checkout') {
-            agent { label 'agent' }
             steps {
-                git url: 'https://github.com/Pooja-chandrappa/jenkins.git'
+                git url: 'https://github.com/artisantek/jenkins.git'
             }
         }
 
         stage('Tests') {
-            
             parallel {
                 stage('Unit Tests') {
-                agent { label 'agent' }
                     steps {
-                        dir('javaapp-tomcat') {
+                        dir('javaapp-pipeline') {
                             sh 'mvn clean test'
                         }
                     }
                 }
                 stage('Trivy Scan') {
-                agent { label 'agent' }
                     steps {
-                        dir('javaapp-tomcat') {
+                        dir('javaapp-pipeline') {
                             sh '''
                                 wget -q https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl -O html.tpl
                                 trivy fs --format template --template "@html.tpl" -o report.html .
@@ -40,84 +30,74 @@ pipeline {
             }
         }
 
-        //stage('Sonar Analysis') {
-         //   agent { label 'agent' }
-          //  steps {
-          //      dir('javaapp-tomcat') {
-          //          withSonarQubeEnv('sonar') {
-           //             sh '''
-            //                mvn clean verify sonar:sonar \
-            //                -Dsonar.projectKey=java-app \
-            //                -Dsonar.projectName=java-app 
-            //            '''
-              //      }
-              //  }
-          //  }
-     //   }
+         stage('Sonar Analysis') {
+             steps {
+                 dir('javaapp-pipeline') {
+                   withSonarQubeEnv('sonar') {
+                         sh '''
+                             mvn clean verify sonar:sonar \
+                             -Dsonar.projectKey=java-app \
+                             -Dsonar.projectName=java-app 
+                         '''
+                     }
+                }
+             }
+         }
 
-        stage('Build WAR') {
-            agent { label 'agent' }
+        stage('Build') {
             steps {
-                dir('javaapp-tomcat') {
+                dir('javaapp-pipeline') {
                     sh 'mvn clean package'
                 }
             }
         }
 
-        stage('Publish WAR to Artifactory') {
-            agent { label 'agent' }
-            steps {
-                dir('javaapp-tomcat/target') {
-                    rtUpload(
-                        serverId: "${ARTIFACTORY_SERVER_ID}",
-                        spec: """{
-                            "files": [
-                                {
-                                    "pattern": "${WAR_NAME}",
-                                    "target": "${ARTIFACTORY_REPO_PATH}"
-                                }
-                            ]
-                        }"""
-                    )
-                }
-            }
-        }
-
-        stage('Download WAR and Deploy to Tomcat') {
-            agent { label 'ubunt2' }  // This should run on your Tomcat server agent
-            environment {
-                KEY = 'sshcred'      // Jenkins secret credential: SSH private key
-                USER = 'ubuntu'
-                HOST = '172.31.2.23'
-            }
+        stage('Publish') {
             steps {
                 script {
-                    // Download from Artifactory
-                    def server = Artifactory.server("${ARTIFACTORY_SERVER_ID}")
-                    def downloadSpec = """{
-                        "files": [{
-                            "pattern": "${ARTIFACTORY_REPO_PATH}${WAR_NAME}",
-                            "target": "javaapp-tomcat/target/"
-                        }]
-                    }"""
-                    server.download(downloadSpec)
+                    def GROUP_ID = sh(script: "mvn help:evaluate -Dexpression=project.groupId -q -DforceStdout -f javaapp-pipeline/pom.xml", returnStdout: true).trim()
+                    def ARTIFACT_ID = sh(script: "mvn help:evaluate -Dexpression=project.artifactId -q -DforceStdout -f javaapp-pipeline/pom.xml", returnStdout: true).trim()
+                    def VERSION = sh(script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout -f javaapp-pipeline/pom.xml", returnStdout: true).trim()
+                    def GROUP_PATH = sh(script: "echo '${GROUP_ID}' | tr '.' '/'", returnStdout: true).trim()
+                    def TARGET_PATH = "maven/${GROUP_PATH}/${ARTIFACT_ID}/${VERSION}/"
+                    def JAR_PATH = "${ARTIFACT_ID}-${VERSION}.jar"
+        
+                    dir('javaapp-pipeline/target') {
+                        rtUpload(
+                            serverId: 'jfrog',
+                            spec: """{
+                                "files": [
+                                    {
+                                        "pattern": "${JAR_PATH}",
+                                        "target": "${TARGET_PATH}"
+                                    }
+                                ]
+                            }"""
+                        )
+                    }
                 }
-
-                // Deploy WAR to remote Tomcat
-                sh '''
-                    cd javaapp-tomcat
-                    chmod 400 $KEY
-                    scp -o StrictHostKeyChecking=no -i $KEY target/artisantek-app.war $USER@$HOST:/home/ubuntu
-                    ssh -o StrictHostKeyChecking=no -i $KEY $USER@$HOST 'sudo mv /home/ubuntu/artisantek-app.war /opt/tomcat/webapps/'
-                    ssh -o StrictHostKeyChecking=no -i $KEY $USER@$HOST 'sudo systemctl restart tomcat'
-                '''
             }
         }
+
+        stage('Deploy') {
+            steps {
+                dir('javaapp-pipeline/target') {
+                    sh '''
+                        if pgrep -f "java -jar java-sample-21-1.0.0.jar" > /dev/null; then
+                            pkill -f "java -jar java-sample-21-1.0.0.jar"
+                            echo "App was running and has been killed."
+                        else
+                            echo "App is not running."
+                        fi
+                        JENKINS_NODE_COOKIE=dontKillMe nohup java -jar java-sample-21-1.0.0.jar > app.log 2>&1 &
+                    '''
+                }
+            }
+        }
+
     }
-post {
-    always {
-        cleanWs()
-    }
-}
-  
+    
+   
+
+
 }
